@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orion — Notizie</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#12182B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Orion">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#12182B;
+    --panel:#1B2340;
+    --panel-hover:#212B4D;
+    --brass:#C9A227;
+    --brass-soft:rgba(201,162,39,0.35);
+    --parchment:#EDE6D6;
+    --mist:#8B93A7;
+    --green:#4FA57D;
+    --coral:#C1584B;
+    --line:rgba(139,147,167,0.16);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0;
+    background:var(--ink);
+    background-image:
+      radial-gradient(ellipse at 20% -10%, rgba(201,162,39,0.06), transparent 40%),
+      radial-gradient(ellipse at 80% 0%, rgba(79,165,125,0.05), transparent 35%);
+    color:var(--parchment);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  .wrap{max-width:720px;margin:0 auto;padding:36px 20px 80px;}
+
+  header{margin-bottom:28px;}
+  .brand-row{margin-bottom:16px;}
+  .utility-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding-top:14px;
+    border-top:1px solid var(--line);
+  }
+  .wordmark{
+    display:inline-flex;
+    align-items:center;
+    white-space:nowrap;
+    font-family:'Fraunces',serif;
+    font-style:italic;
+    font-weight:600;
+    font-size:28px;
+    letter-spacing:0.5px;
+    color:var(--parchment);
+    flex-shrink:0;
+  }
+  .o-star{
+    flex-shrink:0;
+    margin:0 1px;
+  }
+  .o-star path{
+    filter:drop-shadow(0 0 3px rgba(255,255,255,0.85)) drop-shadow(0 0 6px rgba(127,195,237,0.5));
+  }
+  .o-star circle{
+    filter:drop-shadow(0 0 2px rgba(127,195,237,0.4));
+  }
+  .header-right{display:flex;align-items:center;gap:18px;}
+  .date-greeting{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--mist);letter-spacing:0.4px;}
+  .icon-btn{
+    width:34px;height:34px;border-radius:50%;
+    border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;
+    color:var(--mist); cursor:pointer; transition:all .2s ease;
+    background:transparent;
+  }
+  .icon-btn:hover{border-color:var(--brass-soft);color:var(--brass);}
+  .icon-btn.active{border-color:var(--brass);color:var(--brass);}
+
+  .search-bar{
+    display:none;
+    margin-top:14px;
+  }
+  .search-bar.show{display:flex;}
+  .search-bar input{
+    width:100%;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:10px 14px;
+    color:var(--parchment);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13px;
+    outline:none;
+  }
+  .search-bar input::placeholder{color:var(--mist);}
+  .search-bar input:focus{border-color:var(--brass-soft);}
+
+  /* vista compatta: nasconde i riassunti, card più strette */
+  body.compact .summary{display:none;}
+  body.compact .card{padding:11px 4px;}
+
+  /* notizie già lette: si spengono visivamente ma restano al loro posto */
+  .card.read{opacity:0.4;}
+  .card.read .headline{color:var(--mist);}
+
+  .load-more-btn{
+    display:none;
+    width:100%;
+    margin:8px 0 30px;
+    padding:13px;
+    background:transparent;
+    border:1px solid var(--line);
+    border-radius:10px;
+    color:var(--mist);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px;
+    letter-spacing:0.4px;
+    cursor:pointer;
+    transition:all .2s ease;
+  }
+  .load-more-btn.show{display:block;}
+  .load-more-btn:hover{border-color:var(--brass-soft);color:var(--brass);}
+
+  .feed-counter{
+    text-align:center;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    color:var(--mist);
+    letter-spacing:0.3px;
+    margin-top:6px;
+  }
+
+  .retry-banner{
+    background:rgba(201,162,39,0.1);
+    border:1px solid var(--brass-soft);
+    border-radius:10px;
+    padding:12px 16px;
+    margin-bottom:16px;
+    font-size:13px;
+    color:var(--parchment);
+    cursor:pointer;
+    text-align:center;
+  }
+  .retry-banner:hover{border-color:var(--brass);}
+
+  /* Lettore articolo dentro l'app */
+  .reader-overlay{
+    position:fixed;
+    inset:0;
+    background:var(--ink);
+    z-index:1000;
+    display:none;
+    flex-direction:column;
+    transform:translateY(100%);
+    transition:transform .25s ease;
+  }
+  .reader-overlay.open{
+    display:flex;
+    transform:translateY(0);
+  }
+  .reader-topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:14px 16px;
+    border-bottom:1px solid var(--line);
+    flex-shrink:0;
+  }
+  .reader-close{
+    background:transparent;
+    border:1px solid var(--line);
+    border-radius:8px;
+    color:var(--mist);
+    padding:8px 14px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px;
+    cursor:pointer;
+  }
+  .reader-close:hover{border-color:var(--brass-soft);color:var(--brass);}
+  .reader-body{
+    flex:1;
+    min-height:0;
+    overflow-y:auto;
+    display:flex;
+    justify-content:center;
+  }
+  .reader-content{
+    width:100%;
+    max-width:560px;
+    padding:36px 24px 60px;
+  }
+  .reader-tag{
+    display:inline-block;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    color:var(--brass);
+    border:1px solid var(--brass-soft);
+    border-radius:20px;
+    padding:4px 12px;
+    margin-bottom:16px;
+  }
+  .reader-meta{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    color:var(--mist);
+    margin-bottom:14px;
+  }
+  .reader-title{
+    font-family:'Fraunces',serif;
+    font-weight:600;
+    font-size:26px;
+    line-height:1.3;
+    color:var(--parchment);
+    margin-bottom:20px;
+  }
+  .reader-summary{
+    font-size:16px;
+    line-height:1.65;
+    color:var(--parchment);
+    opacity:0.9;
+    margin-bottom:32px;
+  }
+  .reader-cta{
+    display:inline-block;
+    background:var(--brass);
+    color:var(--ink);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13px;
+    font-weight:500;
+    letter-spacing:0.3px;
+    text-decoration:none;
+    padding:14px 24px;
+    border-radius:10px;
+  }
+  .reader-cta:hover{opacity:0.9;}
+  .reader-ai-label{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    color:var(--mist);
+    margin:-16px 0 24px;
+  }
+
+  .summary-card{
+    background:var(--panel);
+    border:1px solid var(--brass-soft);
+    border-radius:12px;
+    padding:16px 18px;
+    margin-bottom:14px;
+  }
+  .summary-card .summary-label{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10px;
+    letter-spacing:1.2px;
+    text-transform:uppercase;
+    color:var(--brass);
+    margin-bottom:8px;
+  }
+  .summary-card p{
+    font-size:14px;
+    line-height:1.55;
+    color:var(--parchment);
+  }
+
+  /* Constellation nav */
+  .constellation-card{
+    background:
+      radial-gradient(ellipse at 28% 15%, rgba(127,195,237,0.08), transparent 55%),
+      radial-gradient(ellipse at 75% 85%, rgba(79,165,125,0.04), transparent 50%),
+      #0E1226;
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:20px 20px 14px;
+    margin-bottom:32px;
+  }
+  .constellation-label{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    color:var(--mist);
+    margin-bottom:10px;
+  }
+  #constellation{width:100%;max-width:400px;height:auto;display:block;margin:0 auto;}
+  .skeleton-line{stroke:rgba(159,196,237,0.3);stroke-width:1.1;}
+  .star{cursor:pointer;transition:all .25s ease;outline:none;}
+  .star:focus{outline:none;}
+  .star-halo{fill:url(#glowDim);transition:all .3s ease;}
+  .star.active .star-halo{fill:url(#glowBright);}
+  .star.active .star-halo{fill:url(#glowBright);}
+  .star-core{fill:#3A4468;stroke:#6B7796;stroke-width:1.2;transition:all .25s ease;}
+  .star.active .star-core{fill:#EAF6FF;stroke:#BFE3FF;}
+  .star-label{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:8.5px;
+    fill:var(--mist);
+    opacity:0.75;
+    letter-spacing:0.3px;
+    transition:all .25s ease;
+  }
+  .star.active .star-label{fill:#DCEEFC;opacity:1;}
+  .star:hover .star-core{stroke:#BFE3FF;}
+  .bg-star{fill:#CFE6FA;}
+
+  /* Feed */
+  .day-label{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    color:var(--mist);
+    margin:30px 0 14px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .day-label::after{content:'';flex:1;height:1px;background:var(--line);}
+
+  .card{
+    padding:18px 4px;
+    border-bottom:1px solid var(--line);
+    cursor:pointer;
+    transition:background .15s ease;
+  }
+  .card:hover{background:rgba(255,255,255,0.015);}
+  .card:hover .headline{color:var(--brass);}
+  .meta{
+    display:flex;align-items:center;gap:10px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;
+    color:var(--mist);
+    margin-bottom:8px;
+    letter-spacing:0.3px;
+  }
+  .tag{
+    padding:2px 7px;
+    border-radius:20px;
+    border:1px solid var(--line);
+    text-transform:uppercase;
+    font-size:9px;
+    letter-spacing:0.6px;
+  }
+  .tag.macro{color:#9FB4D9;border-color:rgba(159,180,217,0.35);}
+  .tag.crypto{color:var(--brass);border-color:var(--brass-soft);}
+  .tag.azioni{color:var(--green);border-color:rgba(79,165,125,0.35);}
+  .tag.obbligazioni{color:#B79FD9;border-color:rgba(183,159,217,0.35);}
+  .tag.materie{color:var(--coral);border-color:rgba(193,88,75,0.35);}
+  .tag.forex{color:#7FC3ED;border-color:rgba(127,195,237,0.4);}
+
+  .headline{
+    font-family:'Fraunces',serif;
+    font-weight:500;
+    font-size:19px;
+    line-height:1.35;
+    color:var(--parchment);
+    margin:0 0 6px;
+    transition:color .15s ease;
+  }
+  .summary{
+    font-size:13.5px;
+    line-height:1.55;
+    color:var(--mist);
+    margin:0;
+    max-width:600px;
+  }
+
+  .empty-state{
+    text-align:center;
+    padding:60px 20px;
+    color:var(--mist);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px;
+    line-height:1.7;
+    display:none;
+  }
+  .empty-state.show{display:block;}
+  .loading-state{
+    text-align:center;
+    padding:50px 20px;
+    color:var(--mist);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    letter-spacing:0.3px;
+  }
+
+  @media(max-width:520px){
+    .headline{font-size:17px;}
+    .wordmark{font-size:24px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand-row">
+      <div class="wordmark">ORI<svg class="o-star" viewBox="0 0 40 40" width="24" height="24" aria-hidden="true">
+          <circle cx="20" cy="20" r="15" fill="none" stroke="#7FC3ED" stroke-width="3.2"></circle>
+          <path d="M20,9 L22.4,17.6 L31,20 L22.4,22.4 L20,31 L17.6,22.4 L9,20 L17.6,17.6 Z" fill="#FDFEFF"></path>
+        </svg>N</div>
+    </div>
+    <div class="utility-row">
+      <div class="date-greeting">GIO 23 LUG · 08:47</div>
+      <div class="header-right">
+        <div class="icon-btn" id="searchBtn" title="Cerca">⌕</div>
+        <div class="icon-btn" id="compactBtn" title="Vista compatta">≡</div>
+        <div class="icon-btn" id="hideReadBtn" title="Nascondi già lette">◎</div>
+        <div class="icon-btn" title="Impostazioni">⚙</div>
+      </div>
+    </div>
+    <div class="search-bar" id="searchBar">
+      <input type="text" id="searchInput" placeholder="Cerca per parola chiave…" autocomplete="off">
+    </div>
+  </header>
+
+  <div class="constellation-card">
+    <div class="constellation-label">Le tue stelle — tocca per filtrare</div>
+    <svg viewBox="0 0 320 320" id="constellation">
+      <defs>
+        <radialGradient id="glowBright" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#EAF6FF" stop-opacity="0.95"/>
+          <stop offset="30%" stop-color="#8FD1FF" stop-opacity="0.5"/>
+          <stop offset="100%" stop-color="#8FD1FF" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="glowDim" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#6B7796" stop-opacity="0.4"/>
+          <stop offset="100%" stop-color="#6B7796" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+
+      <!-- scattered starfield for depth -->
+      <g aria-hidden="true">
+        <circle class="bg-star" cx="20" cy="20" r="1.2" opacity="0.5"></circle>
+        <circle class="bg-star" cx="60" cy="80" r="0.9" opacity="0.35"></circle>
+        <circle class="bg-star" cx="15" cy="140" r="1.4" opacity="0.55"></circle>
+        <circle class="bg-star" cx="18" cy="230" r="1" opacity="0.4"></circle>
+        <circle class="bg-star" cx="55" cy="290" r="0.8" opacity="0.3"></circle>
+        <circle class="bg-star" cx="95" cy="18" r="0.9" opacity="0.3"></circle>
+        <circle class="bg-star" cx="95" cy="270" r="0.8" opacity="0.35"></circle>
+        <circle class="bg-star" cx="110" cy="90" r="0.8" opacity="0.3"></circle>
+        <circle class="bg-star" cx="105" cy="230" r="0.9" opacity="0.3"></circle>
+        <circle class="bg-star" cx="200" cy="90" r="0.9" opacity="0.3"></circle>
+        <circle class="bg-star" cx="215" cy="230" r="1" opacity="0.35"></circle>
+        <circle class="bg-star" cx="230" cy="60" r="0.8" opacity="0.3"></circle>
+        <circle class="bg-star" cx="235" cy="280" r="0.9" opacity="0.35"></circle>
+        <circle class="bg-star" cx="260" cy="90" r="1.1" opacity="0.45"></circle>
+        <circle class="bg-star" cx="270" cy="230" r="0.8" opacity="0.3"></circle>
+        <circle class="bg-star" cx="300" cy="30" r="0.9" opacity="0.35"></circle>
+        <circle class="bg-star" cx="300" cy="145" r="1" opacity="0.4"></circle>
+        <circle class="bg-star" cx="300" cy="290" r="0.8" opacity="0.3"></circle>
+        <circle class="bg-star" cx="160" cy="120" r="0.8" opacity="0.25"></circle>
+        <circle class="bg-star" cx="160" cy="200" r="0.8" opacity="0.25"></circle>
+        <circle class="bg-star" cx="120" cy="160" r="0.8" opacity="0.25"></circle>
+        <circle class="bg-star" cx="200" cy="160" r="0.8" opacity="0.25"></circle>
+      </g>
+
+      <!-- North Star: quattro punte cardinali collegate a due a due da archi esponenziali -->
+      <path class="skeleton-line" d="M160,45 Q160,160 275,160" fill="none"/>
+      <path class="skeleton-line" d="M275,160 Q160,160 160,275" fill="none"/>
+      <path class="skeleton-line" d="M160,275 Q160,160 45,160" fill="none"/>
+      <path class="skeleton-line" d="M45,160 Q160,160 160,45" fill="none"/>
+
+      <!-- stars / category nodes -->
+      <g class="star active" data-cat="macro">
+        <circle class="star-halo" cx="160" cy="45" r="16"></circle>
+        <circle class="star-core" cx="160" cy="45" r="6.5"></circle>
+        <text class="star-label" x="160" y="28" text-anchor="middle">MACRO</text>
+      </g>
+      <g class="star active" data-cat="azioni">
+        <circle class="star-halo" cx="275" cy="160" r="16"></circle>
+        <circle class="star-core" cx="275" cy="160" r="6.5"></circle>
+        <text class="star-label" x="292" y="164" text-anchor="start">AZIONI</text>
+      </g>
+      <g class="star active" data-cat="crypto">
+        <circle class="star-halo" cx="160" cy="275" r="16"></circle>
+        <circle class="star-core" cx="160" cy="275" r="6.5"></circle>
+        <text class="star-label" x="160" y="298" text-anchor="middle">CRYPTO</text>
+      </g>
+      <g class="star" data-cat="forex">
+        <circle class="star-halo" cx="45" cy="160" r="16"></circle>
+        <circle class="star-core" cx="45" cy="160" r="6.5"></circle>
+        <text class="star-label" x="28" y="164" text-anchor="end">FOREX</text>
+      </g>
+      <g class="star" data-cat="obbligazioni">
+        <circle class="star-halo" cx="147" cy="160" r="14"></circle>
+        <circle class="star-core" cx="147" cy="160" r="6"></circle>
+        <text class="star-label" x="108" y="142" text-anchor="middle">OBBLIGAZ.</text>
+      </g>
+      <g class="star" data-cat="materie">
+        <circle class="star-halo" cx="173" cy="160" r="14"></circle>
+        <circle class="star-core" cx="173" cy="160" r="6"></circle>
+        <text class="star-label" x="212" y="182" text-anchor="middle">MATERIE</text>
+      </g>
+    </svg>
+  </div>
+
+  <div id="summaries"></div>
+
+  <div id="feed">
+    <div class="loading-state" id="loadingState">Carico le notizie…</div>
+  </div>
+
+  <div class="feed-counter" id="feedCounter"></div>
+  <button class="load-more-btn" id="loadMoreBtn">Carica altri</button>
+
+  <div class="empty-state" id="emptyState">
+    · · ·<br>
+    Nessuna stella accesa.<br>Scegli almeno una categoria per vedere le notizie.
+  </div>
+
+</div>
+
+<div class="reader-overlay" id="readerOverlay">
+  <div class="reader-topbar">
+    <button class="reader-close" id="readerClose">✕ Chiudi</button>
+  </div>
+  <div class="reader-body">
+    <div class="reader-content">
+      <div class="reader-tag" id="readerTag"></div>
+      <div class="reader-meta" id="readerMeta"></div>
+      <h2 class="reader-title" id="readerTitle"></h2>
+      <p class="reader-summary" id="readerSummary"></p>
+      <div class="reader-ai-label" id="readerAiLabel" style="display:none">✦ riassunto realizzato dall'IA, basato su titolo e anteprima</div>
+      <a class="reader-cta" id="readerCta" target="_blank" rel="noopener">Leggi l'articolo completo sul sito ↗</a>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ---------------------------------------------------------------------
+  // 1. Config — sostituisci con l'URL del tuo servizio Render una volta deployato
+  // ---------------------------------------------------------------------
+  const API_URL = 'https://orion-backend-vnbk.onrender.com/api/feed';
+
+  const CATEGORY_LABELS = {
+    macro: 'Macro', azioni: 'Azioni', crypto: 'Crypto',
+    forex: 'Forex', obbligazioni: 'Obbligazioni', materie: 'Materie'
+  };
+
+  // Dati di riserva: usati solo se il backend non è ancora online o non risponde,
+  // così il mockup resta sempre navigabile in anteprima.
+  const DEMO_ARTICLES = [
+    { title:"La BCE lascia i tassi invariati, attesa per i dati sull'inflazione di agosto", summary:"Il consiglio direttivo mantiene la linea prudente. Gli analisti si aspettano un primo taglio non prima dell'autunno.", source:"Reuters", category:"macro", publishedAt: hoursAgo(1), link:"https://www.reuters.com/business/" },
+    { title:"Bitcoin torna sopra i 70.000 dollari dopo tre settimane di consolidamento", summary:"Il rimbalzo arriva insieme a un aumento dei flussi verso gli ETF spot statunitensi.", source:"CoinDesk", category:"crypto", publishedAt: hoursAgo(1.7), link:"https://www.coindesk.com/" },
+    { title:"Piazza Affari apre in rialzo, bene i bancari dopo le trimestrali", summary:"UniCredit e Intesa Sanpaolo trainano il FTSE MIB dopo utili superiori alle attese.", source:"Il Sole 24 Ore", category:"azioni", publishedAt: hoursAgo(2.4), link:"https://www.ilsole24ore.com/" },
+    { title:"Il petrolio scende ai minimi di sei mesi sull'aumento delle scorte USA", summary:"Il Brent scivola sotto i 78 dollari al barile, pesa anche la domanda cinese più debole.", source:"Bloomberg", category:"materie", publishedAt: hoursAgo(3), link:"https://www.bloomberg.com/" },
+    { title:"Il dollaro si indebolisce dopo i dati sull'occupazione USA", summary:"L'euro sale sopra 1,09 sul biglietto verde, mercati ora attenti al discorso della Fed di domani.", source:"Bloomberg", category:"forex", publishedAt: hoursAgo(2.6), link:"https://www.bloomberg.com/" },
+    { title:"Il BTP a 10 anni scende sotto il 3,6%, spread stabile a 115 punti", summary:"La domanda resta solida in vista della prossima asta di metà mese.", source:"Milano Finanza", category:"obbligazioni", publishedAt: hoursAgo(26), link:"https://www.milanofinanza.it/" },
+    { title:"Negli USA i sussidi di disoccupazione salgono più del previsto", summary:"Il dato riaccende le attese di un mercato del lavoro in raffreddamento, dollaro in leggero calo.", source:"Investing.com", category:"macro", publishedAt: hoursAgo(29), link:"https://www.investing.com/" },
+    { title:"Ethereum, in arrivo un aggiornamento chiave sulla scalabilità della rete", summary:"Gli sviluppatori confermano la data della prossima fork sulla mainnet.", source:"Reuters", category:"crypto", publishedAt: hoursAgo(32), link:"https://www.reuters.com/business/" },
+    { title:"Yen ai minimi da mesi, la Banca del Giappone resta a guardare", summary:"Il cambio USD/JPY sfiora quota 158, cresce la pressione per un intervento verbale delle autorità.", source:"Investing.com", category:"forex", publishedAt: hoursAgo(35), link:"https://www.investing.com/" },
+  ];
+  function hoursAgo(h){ return new Date(Date.now() - h*3600*1000).toISOString(); }
+
+  // ---------------------------------------------------------------------
+  // 2. Rendering
+  // ---------------------------------------------------------------------
+  const feedEl = document.getElementById('feed');
+  const emptyState = document.getElementById('emptyState');
+  const summariesEl = document.getElementById('summaries');
+  let categorySummaries = {};
+  let stars = document.querySelectorAll('.star'); // già presenti nell'SVG statico
+
+  // --- ricorda quali stelle erano accese, tra una visita e l'altra ---
+  (function restoreStarSelection(){
+    const saved = localStorage.getItem('orion-active-cats');
+    if (saved === null) return; // prima visita: restano quelle di default nell'SVG
+    const activeCats = new Set(JSON.parse(saved));
+    stars.forEach(star => {
+      star.classList.toggle('active', activeCats.has(star.dataset.cat));
+    });
+  })();
+
+  function saveStarSelection(){
+    const activeCats = [...stars].filter(s => s.classList.contains('active')).map(s => s.dataset.cat);
+    localStorage.setItem('orion-active-cats', JSON.stringify(activeCats));
+  }
+
+  // --- notizie lette: salvate sul telefono, nessun account richiesto ---
+  let readLinks;
+  try {
+    readLinks = new Set(JSON.parse(localStorage.getItem('orion-read') || '[]'));
+  } catch { readLinks = new Set(); }
+
+  function markAsRead(link, cardEl){
+    readLinks.add(link);
+    cardEl.classList.add('read');
+    // teniamo solo gli ultimi 500 link letti, altrimenti lo storage cresce all'infinito
+    const trimmed = [...readLinks].slice(-500);
+    localStorage.setItem('orion-read', JSON.stringify(trimmed));
+    if (hideRead) applyFilter(false);
+  }
+
+  function renderSummaries(){
+    summariesEl.innerHTML = '';
+    const activeCats = [...stars].filter(s => s.classList.contains('active')).map(s => s.dataset.cat);
+    activeCats.forEach(cat => {
+      const text = categorySummaries[cat];
+      if (!text) return;
+      const card = document.createElement('div');
+      card.className = 'summary-card';
+      card.innerHTML = `
+        <div class="summary-label">Il punto — ${CATEGORY_LABELS[cat] || cat}</div>
+        <p>${text}</p>
+      `;
+      summariesEl.appendChild(card);
+    });
+  }
+
+  function dayLabelFor(iso){
+    const d = new Date(iso);
+    const today = new Date();
+    const diffDays = Math.floor((today.setHours(0,0,0,0) - new Date(d).setHours(0,0,0,0)) / 86400000);
+    if (diffDays <= 0) return 'Oggi';
+    if (diffDays === 1) return 'Ieri';
+    return d.toLocaleDateString('it-IT', { day:'numeric', month:'long' });
+  }
+
+  // ---------------------------------------------------------------------
+  // 2b. Lettore articolo dentro l'app: mostra titolo + riassunto in una
+  // scheda leggibile, con un bottone per andare al sito per il testo intero.
+  // (Niente iframe: la maggior parte delle testate blocca l'incorporamento
+  // per sicurezza — X-Frame-Options/CSP — quindi non è una strada percorribile.)
+  // ---------------------------------------------------------------------
+  const readerOverlay = document.getElementById('readerOverlay');
+  const readerTag = document.getElementById('readerTag');
+  const readerMeta = document.getElementById('readerMeta');
+  const readerTitle = document.getElementById('readerTitle');
+  const readerSummary = document.getElementById('readerSummary');
+  const readerAiLabel = document.getElementById('readerAiLabel');
+  const readerCta = document.getElementById('readerCta');
+  const readerClose = document.getElementById('readerClose');
+  const ARTICLE_SUMMARY_URL = API_URL.replace('/api/feed', '/api/article-summary');
+  let readerRequestId = 0; // per ignorare risposte in ritardo se apri un altro articolo nel frattempo
+
+  function openReader(article){
+    const requestId = ++readerRequestId;
+    readerTag.textContent = CATEGORY_LABELS[article.category] || article.category;
+    const time = new Date(article.publishedAt).toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
+    readerMeta.textContent = `${article.source} · ${time}`;
+    readerTitle.textContent = article.title;
+    readerSummary.textContent = article.summary || '';
+    readerAiLabel.style.display = 'none';
+    readerCta.href = article.link;
+    readerOverlay.classList.add('open');
+    readerOverlay.scrollTop = 0;
+    readerOverlay.querySelector('.reader-body').scrollTop = 0;
+
+    // prova a farsi scrivere da Groq una versione più completa — in sottofondo,
+    // senza far aspettare l'utente: se non arriva o fallisce, resta il testo grezzo.
+    // Timeout più largo di prima: ora il backend prova anche a scaricare la
+    // pagina vera dell'articolo, non solo a interrogare Groq.
+    fetchWithTimeout(ARTICLE_SUMMARY_URL, 20000, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: article.title, summary: article.summary || '', link: article.link }),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (requestId !== readerRequestId) return; // l'utente ha già aperto un altro articolo
+        if (data && data.summary) {
+          readerSummary.textContent = data.summary;
+          readerAiLabel.textContent = data.fromFullText
+            ? "✦ riassunto realizzato dall'IA, basato sul testo completo dell'articolo"
+            : "✦ riassunto realizzato dall'IA, basato su titolo e anteprima (l'articolo completo non era scaricabile)";
+          readerAiLabel.style.display = '';
+        }
+      })
+      .catch(() => {}); // silenzioso: resta il testo grezzo, nessun errore mostrato all'utente
+  }
+
+  function closeReader(){
+    readerOverlay.classList.remove('open');
+  }
+
+  readerClose.addEventListener('click', closeReader);
+
+  function renderArticles(articles){
+    feedEl.innerHTML = '';
+    if (!articles.length) return;
+
+    let currentDay = null;
+    for (const a of articles) {
+      const day = dayLabelFor(a.publishedAt);
+      if (day !== currentDay) {
+        currentDay = day;
+        const label = document.createElement('div');
+        label.className = 'day-label';
+        label.textContent = day;
+        feedEl.appendChild(label);
+      }
+      const time = new Date(a.publishedAt).toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.dataset.cat = a.category;
+      card.dataset.search = `${a.title} ${a.summary || ''} ${a.source}`.toLowerCase();
+      if (a.link && readLinks.has(a.link)) card.classList.add('read');
+      card.innerHTML = `
+        <div class="meta"><span>${time}</span><span>·</span><span>${a.source}</span><span class="tag ${a.category}">${CATEGORY_LABELS[a.category] || a.category}</span></div>
+        <p class="headline">${a.title}</p>
+        <p class="summary">${a.summary || ''}</p>
+      `;
+      if (a.link) {
+        card.addEventListener('click', () => {
+          openReader(a);
+          markAsRead(a.link, card);
+        });
+      }
+      feedEl.appendChild(card);
+    }
+
+    applyFilter();
+  }
+
+  // ---------------------------------------------------------------------
+  // 3. Filtro: stella attiva/inattiva + ricerca testuale + paginazione
+  // ---------------------------------------------------------------------
+  let searchQuery = '';
+  let hideRead = localStorage.getItem('orion-hide-read') === '1';
+  const PAGE_SIZE = 20;
+  let visibleLimit = PAGE_SIZE;
+  const loadMoreBtn = document.getElementById('loadMoreBtn');
+  const feedCounter = document.getElementById('feedCounter');
+
+  function applyFilter(resetPage = true){
+    if (resetPage) visibleLimit = PAGE_SIZE;
+
+    const active = new Set(
+      [...stars].filter(s => s.classList.contains('active')).map(s => s.dataset.cat)
+    );
+
+    // FASE 1: capiamo quali card rispettano stella+ricerca+letti (tutte, senza limite)
+    const allCards = [...feedEl.querySelectorAll('.card')];
+    const matching = allCards.filter(card => {
+      const matchesCategory = active.has(card.dataset.cat);
+      const matchesSearch = !searchQuery || card.dataset.search.includes(searchQuery);
+      const matchesRead = !hideRead || !card.classList.contains('read');
+      return matchesCategory && matchesSearch && matchesRead;
+    });
+
+    // FASE 2: delle card che rispettano i filtri, mostriamo solo le prime "visibleLimit"
+    allCards.forEach(card => { card.style.display = 'none'; });
+    const toShow = matching.slice(0, visibleLimit);
+    toShow.forEach(card => { card.style.display = ''; });
+
+    feedEl.querySelectorAll('.day-label').forEach(label => {
+      let el = label.nextElementSibling;
+      let hasVisible = false;
+      while (el && !el.classList.contains('day-label')) {
+        if (el.classList.contains('card') && el.style.display !== 'none') hasVisible = true;
+        el = el.nextElementSibling;
+      }
+      label.style.display = hasVisible ? '' : 'none';
+    });
+
+    emptyState.classList.toggle('show', toShow.length === 0);
+    loadMoreBtn.classList.toggle('show', matching.length > toShow.length);
+    feedCounter.textContent = matching.length
+      ? `Mostrando ${toShow.length} di ${matching.length} notizie`
+      : '';
+  }
+
+  loadMoreBtn.addEventListener('click', () => {
+    visibleLimit += PAGE_SIZE;
+    applyFilter(false); // false = non tornare alla prima pagina
+  });
+
+  stars.forEach(star => {
+    star.addEventListener('click', () => {
+      star.classList.toggle('active');
+      saveStarSelection();
+      applyFilter();
+      renderSummaries();
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // 3b. Barra di ricerca: si apre/chiude col pulsante ⌕, filtra mentre scrivi
+  // ---------------------------------------------------------------------
+  const searchBtn = document.getElementById('searchBtn');
+  const searchBar = document.getElementById('searchBar');
+  const searchInput = document.getElementById('searchInput');
+
+  searchBtn.addEventListener('click', () => {
+    const opening = !searchBar.classList.contains('show');
+    searchBar.classList.toggle('show');
+    searchBtn.classList.toggle('active', opening);
+    if (opening) {
+      searchInput.focus();
+    } else {
+      searchInput.value = '';
+      searchQuery = '';
+      applyFilter();
+    }
+  });
+
+  searchInput.addEventListener('input', () => {
+    searchQuery = searchInput.value.trim().toLowerCase();
+    applyFilter();
+  });
+
+  // ---------------------------------------------------------------------
+  // 3c. Vista compatta: nasconde i riassunti, si ricorda la scelta
+  // ---------------------------------------------------------------------
+  const compactBtn = document.getElementById('compactBtn');
+
+  function setCompact(on){
+    document.body.classList.toggle('compact', on);
+    compactBtn.classList.toggle('active', on);
+    localStorage.setItem('orion-compact', on ? '1' : '0');
+  }
+
+  compactBtn.addEventListener('click', () => {
+    setCompact(!document.body.classList.contains('compact'));
+  });
+
+  setCompact(localStorage.getItem('orion-compact') === '1');
+
+  // ---------------------------------------------------------------------
+  // 3d. Nascondi già lette: interruttore, ricordato tra una visita e l'altra
+  // ---------------------------------------------------------------------
+  const hideReadBtn = document.getElementById('hideReadBtn');
+  hideReadBtn.classList.toggle('active', hideRead);
+
+  hideReadBtn.addEventListener('click', () => {
+    hideRead = !hideRead;
+    hideReadBtn.classList.toggle('active', hideRead);
+    localStorage.setItem('orion-hide-read', hideRead ? '1' : '0');
+    applyFilter();
+  });
+
+  // ---------------------------------------------------------------------
+  // 4. Caricamento: prova il backend live (con un tentativo extra per il
+  // "risveglio" di Render se il servizio dormiva), altrimenti dati demo
+  // ---------------------------------------------------------------------
+  function fetchWithTimeout(url, ms, extraOptions = {}){
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), ms);
+    return fetch(url, { ...extraOptions, signal: controller.signal }).finally(() => clearTimeout(t));
+  }
+
+  async function loadFeed(){
+    // 1° tentativo: 8 secondi, basta se il servizio è già sveglio
+    // 2° tentativo: 55 secondi, per quando Render deve svegliare il servizio
+    // gratuito da fermo (può metterci anche 30-50 secondi la prima volta)
+    for (const timeoutMs of [8000, 55000]) {
+      try {
+        if (timeoutMs > 8000) {
+          const loading = document.getElementById('loadingState');
+          if (loading) loading.textContent = 'Il server si sta svegliando, un attimo di pazienza…';
+        }
+        const res = await fetchWithTimeout(API_URL, timeoutMs);
+        if (!res.ok) throw new Error('risposta non ok');
+        const json = await res.json();
+        categorySummaries = json.summaries || {};
+        renderArticles(json.articles || []);
+        renderSummaries();
+        return; // riuscito, non serve altro tentativo
+      } catch (err) {
+        console.warn(`[orion] tentativo fallito (${timeoutMs}ms):`, err.message);
+      }
+    }
+    // entrambi i tentativi falliti: mostra i dati demo, ma con un modo per riprovare
+    console.warn('[orion] backend non raggiungibile, uso i dati demo');
+    categorySummaries = {};
+    renderArticles(DEMO_ARTICLES);
+    renderSummaries();
+    showRetryBanner();
+  }
+
+  function showRetryBanner(){
+    const banner = document.createElement('div');
+    banner.className = 'retry-banner';
+    banner.textContent = 'Non riesco a contattare il server — sto mostrando notizie di esempio. Tocca qui per riprovare.';
+    banner.addEventListener('click', () => {
+      banner.remove();
+      const loading = document.getElementById('loadingState');
+      if (loading) loading.textContent = 'Riprovo…';
+      loadFeed();
+    });
+    feedEl.parentNode.insertBefore(banner, feedEl);
+  }
+
+  loadFeed();
+
+  // ---------------------------------------------------------------------
+  // 5. PWA — registra il service worker (per installabilità + apertura offline)
+  // ---------------------------------------------------------------------
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js').catch((err) => {
+        console.warn('[orion] service worker non registrato:', err.message);
+      });
+    });
+  }
+</script>
+</body>
+</html>
