@@ -908,7 +908,7 @@
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'it-IT';
     if (bestItalianVoice) utterance.voice = bestItalianVoice;
-    const thisState = { btn, utterance, paused: false, fullText: text, intentionalStop: false, started: false, pendingPause: false, resumeBroken: false };
+    const thisState = { btn, utterance, paused: false, fullText: text, intentionalStop: false, started: false, pendingPause: false, resumeBroken: false, lastBoundaryAt: 0, boundaryCount: 0 };
 
     // su alcuni telefoni, se si chiama pause() prima che la lettura sia
     // DAVVERO partita, il motore vocale si blocca e poi resume() non
@@ -923,6 +923,19 @@
         speechSynthesis.pause();
       }
     };
+
+    // diagnostica: onboundary dovrebbe scattare ripetutamente mentre legge
+    // (di solito parola per parola) — se smette di scattare dopo un resume,
+    // è la prova che il motore è muto anche se dice "speaking: true".
+    utterance.onboundary = (evt) => {
+      thisState.lastBoundaryAt = Date.now();
+      thisState.boundaryCount++;
+      if (thisState.boundaryCount <= 3 || thisState.boundaryCount % 10 === 0) {
+        ttsDebugLog(`onboundary #${thisState.boundaryCount} (tipo: ${evt.name || '?'})`);
+      }
+    };
+    utterance.onpause = () => ttsDebugLog('onpause (il motore conferma la pausa)');
+    utterance.onresume = () => ttsDebugLog('onresume (il motore conferma la ripresa)');
 
     const onEndOrError = (evt) => {
       // controlla che sia ANCORA questa la lettura attiva, e che non sia stata
@@ -954,13 +967,15 @@
   // tocco dell'utente deve ricominciare da capo invece di provare un altro
   // resume, così quel tocco (vero) ha davvero la possibilità di funzionare.
   function checkResumeWorked(state, btn){
+    const boundaryCountAtResume = state.boundaryCount;
     setTimeout(() => {
+      const msSinceBoundary = state.lastBoundaryAt ? (Date.now() - state.lastBoundaryAt) : -1;
       if (speakingState !== state || state.paused) {
         ttsDebugLog('verifica resume: saltata (card cambiata o già in pausa di nuovo)');
         return;
       }
       if (speechSynthesis.speaking && !speechSynthesis.paused) {
-        ttsDebugLog('verifica resume: OK, sta parlando davvero');
+        ttsDebugLog(`verifica resume: speaking=true (msSinceBoundary=${msSinceBoundary}, boundary prima=${boundaryCountAtResume} dopo=${state.boundaryCount})`);
         return;
       }
 
