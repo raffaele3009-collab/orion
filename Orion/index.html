@@ -901,14 +901,23 @@
       paused: '<polygon points="6,4 6,20 20,12" fill="currentColor" stroke="none"/>',
     };
     btn.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${icons[state]}</svg>`;
-    btn.title = state === 'playing' ? 'Metti in pausa' : (state === 'paused' ? 'Riprendi (ricomincia dall\'inizio)' : 'Ascolta');
+    btn.title = state === 'playing' ? 'Metti in pausa' : (state === 'paused' ? 'Riprendi da dove eri' : 'Ascolta');
   }
 
-  function speakFrom(text, btn){
+  // Stima prudente di quanto testo si legge al secondo, usata SOLO per calcolare
+  // approssimativamente da dove ripartire dopo una pausa (vedi toggleListen).
+  // Tenuta volutamente bassa: se sbaglia per eccesso ripete un po' di testo già
+  // sentito (fastidioso ma innocuo), se sbaglia per difetto salta del testo mai
+  // sentito (molto peggio) — meglio un errore "prudente".
+  const SPEECH_CHARS_PER_SECOND = 13;
+
+  function speakFrom(text, btn, fullText, charOffset){
+    fullText = fullText || text;
+    charOffset = charOffset || 0;
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'it-IT';
     if (bestItalianVoice) utterance.voice = bestItalianVoice;
-    const thisState = { btn, utterance, paused: false, fullText: text, intentionalStop: false, started: false, pendingPause: false };
+    const thisState = { btn, utterance, paused: false, fullText, charOffset, segmentStartedAt: null, intentionalStop: false, started: false, pendingPause: false };
 
     // su alcuni telefoni, se si chiama pause() prima che la lettura sia
     // DAVVERO partita, il motore vocale si blocca e poi resume() non
@@ -916,7 +925,8 @@
     // coda" e la applichiamo davvero solo qui, appena l'utterance parte per davvero.
     utterance.onstart = () => {
       thisState.started = true;
-      ttsDebugLog('onstart (la lettura è davvero partita)');
+      thisState.segmentStartedAt = Date.now();
+      ttsDebugLog(`onstart (segmento a partire dal carattere ${charOffset})`);
       if (thisState.pendingPause) {
         thisState.pendingPause = false;
         ttsDebugLog('pausa che era in coda: chiamo pause() ora');
@@ -943,24 +953,31 @@
     speechSynthesis.speak(utterance);
   }
 
-  // Tocco principale (▶/⏸): la pausa resta istantanea (speechSynthesis.pause()),
-  // ma "riprendi" NON usa più resume(). Diagnosticato su device reale: dopo
-  // pause(), resume() può riportare "speaking: true" senza produrre alcun
-  // audio — e su questo motore vocale non scattano né onboundary né
-  // onpause/onresume, quindi non esiste NESSUN segnale affidabile per
-  // accorgersi che è silenziosamente bloccato. L'unica cosa che si è vista
-  // funzionare sempre è l'avvio da un tocco vero: "riprendi" quindi ricomincia
-  // la lettura da capo. Si perde la ripresa precisa al secondo, ma l'audio
-  // esce sempre — è la priorità che avevamo concordato.
+  // Tocco principale (▶/⏸): la pausa resta istantanea (speechSynthesis.pause()).
+  // "Riprendi" NON usa resume() — diagnosticato su device reale: dopo pause(),
+  // resume() può riportare "speaking: true" senza produrre alcun audio, e su
+  // questo motore vocale non scattano segnali (onboundary/onpause/onresume)
+  // per accorgersene. Invece di ricominciare sempre da zero (che vanifica lo
+  // scopo del tasto pausa), stimiamo quanto testo è stato letto nel tempo
+  // trascorso da quando è partito questo "segmento" di lettura, e ripartiamo
+  // da lì con una NUOVA lettura (stesso percorso affidabile di un avvio vero).
+  // Non è preciso al carattere come un resume() vero funzionante, ma è vicino
+  // al punto giusto — non un semplice "ricomincia sempre da capo".
   function toggleListen(text, btn){
     if (!('speechSynthesis' in window)) return;
 
     if (speakingState && speakingState.btn === btn) {
       if (speakingState.paused) {
-        ttsDebugLog('tocco RIPRENDI → ricomincio la lettura da capo');
+        const elapsedMs = speakingState.segmentStartedAt ? (Date.now() - speakingState.segmentStartedAt) : 0;
+        const elapsedChars = Math.round((elapsedMs / 1000) * SPEECH_CHARS_PER_SECOND);
+        let newOffset = speakingState.charOffset + elapsedChars;
+        if (newOffset >= speakingState.fullText.length) newOffset = 0; // stima sforata: meglio ricominciare che restare mutI
+        const remaining = speakingState.fullText.slice(newOffset);
+
+        ttsDebugLog(`tocco RIPRENDI → stimati ${elapsedChars} caratteri letti, riparto dal carattere ${newOffset}`);
         speakingState.intentionalStop = true;
         speechSynthesis.cancel();
-        speakFrom(speakingState.fullText, btn);
+        speakFrom(remaining, btn, speakingState.fullText, newOffset);
       } else {
         ttsDebugLog(`tocco PAUSA (started=${speakingState.started})`);
         if (speakingState.started) {
