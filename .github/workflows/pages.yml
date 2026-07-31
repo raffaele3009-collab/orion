@@ -1,0 +1,34 @@
+# Pubblica il sito su GitHub Pages a partire dalla cartella Orion/ (non dalla
+# radice del repository). Parte da sola ad ogni push su main — non serve
+# lanciarlo a mano, e non c'è nessuna build/compilazione: prende semplicemente
+# i file così come sono in Orion/ e li mette online.
+name: Deploy Orion su GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: Orion
+      - id: deployment
+        uses: actions/deploy-pages@v4
