@@ -901,14 +901,14 @@
       paused: '<polygon points="6,4 6,20 20,12" fill="currentColor" stroke="none"/>',
     };
     btn.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${icons[state]}</svg>`;
-    btn.title = state === 'playing' ? 'Metti in pausa' : (state === 'paused' ? 'Riprendi da dove eri' : 'Ascolta');
+    btn.title = state === 'playing' ? 'Metti in pausa' : (state === 'paused' ? 'Riprendi (ricomincia dall\'inizio)' : 'Ascolta');
   }
 
   function speakFrom(text, btn){
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'it-IT';
     if (bestItalianVoice) utterance.voice = bestItalianVoice;
-    const thisState = { btn, utterance, paused: false, fullText: text, intentionalStop: false, started: false, pendingPause: false, resumeBroken: false, lastBoundaryAt: 0, boundaryCount: 0 };
+    const thisState = { btn, utterance, paused: false, fullText: text, intentionalStop: false, started: false, pendingPause: false };
 
     // su alcuni telefoni, se si chiama pause() prima che la lettura sia
     // DAVVERO partita, il motore vocale si blocca e poi resume() non
@@ -923,19 +923,6 @@
         speechSynthesis.pause();
       }
     };
-
-    // diagnostica: onboundary dovrebbe scattare ripetutamente mentre legge
-    // (di solito parola per parola) — se smette di scattare dopo un resume,
-    // è la prova che il motore è muto anche se dice "speaking: true".
-    utterance.onboundary = (evt) => {
-      thisState.lastBoundaryAt = Date.now();
-      thisState.boundaryCount++;
-      if (thisState.boundaryCount <= 3 || thisState.boundaryCount % 10 === 0) {
-        ttsDebugLog(`onboundary #${thisState.boundaryCount} (tipo: ${evt.name || '?'})`);
-      }
-    };
-    utterance.onpause = () => ttsDebugLog('onpause (il motore conferma la pausa)');
-    utterance.onresume = () => ttsDebugLog('onresume (il motore conferma la ripresa)');
 
     const onEndOrError = (evt) => {
       // controlla che sia ANCORA questa la lettura attiva, e che non sia stata
@@ -956,59 +943,24 @@
     speechSynthesis.speak(utterance);
   }
 
-  // Controlla, DOPO un resume(), che l'audio sia ripartito per davvero — su
-  // alcuni Android, resume() a volte non fa ripartire nulla (bug noto di
-  // Chrome) mentre l'icona dice "in ascolto" e resta muto. Se non è ripartito,
-  // NON riproviamo da soli con un altro resume/speak: molti telefoni Android
-  // fanno ripartire l'audio solo se il comando arriva da un tocco vero
-  // dell'utente, non da codice lanciato in automatico da un timer — un
-  // secondo tentativo automatico fallirebbe silenziosamente allo stesso modo.
-  // Rimettiamo semplicemente il tasto su "pausa" e segnamo che il prossimo
-  // tocco dell'utente deve ricominciare da capo invece di provare un altro
-  // resume, così quel tocco (vero) ha davvero la possibilità di funzionare.
-  function checkResumeWorked(state, btn){
-    const boundaryCountAtResume = state.boundaryCount;
-    setTimeout(() => {
-      const msSinceBoundary = state.lastBoundaryAt ? (Date.now() - state.lastBoundaryAt) : -1;
-      if (speakingState !== state || state.paused) {
-        ttsDebugLog('verifica resume: saltata (card cambiata o già in pausa di nuovo)');
-        return;
-      }
-      if (speechSynthesis.speaking && !speechSynthesis.paused) {
-        ttsDebugLog(`verifica resume: speaking=true (msSinceBoundary=${msSinceBoundary}, boundary prima=${boundaryCountAtResume} dopo=${state.boundaryCount})`);
-        return;
-      }
-
-      ttsDebugLog(`verifica resume: BLOCCATO (speaking=${speechSynthesis.speaking}, paused=${speechSynthesis.paused}) — al prossimo tocco ricomincio da capo`);
-      state.paused = true;
-      state.resumeBroken = true;
-      setListenIcon(btn, 'paused');
-    }, 400);
-  }
-
-  // Tocco principale (▶/⏸): pausa/riprendi VERO, preciso al secondo esatto —
-  // funziona in modo affidabile perché usiamo una voce locale del telefono
-  // (le voci "di rete" più naturali spesso non supportano bene questa funzione).
+  // Tocco principale (▶/⏸): la pausa resta istantanea (speechSynthesis.pause()),
+  // ma "riprendi" NON usa più resume(). Diagnosticato su device reale: dopo
+  // pause(), resume() può riportare "speaking: true" senza produrre alcun
+  // audio — e su questo motore vocale non scattano né onboundary né
+  // onpause/onresume, quindi non esiste NESSUN segnale affidabile per
+  // accorgersi che è silenziosamente bloccato. L'unica cosa che si è vista
+  // funzionare sempre è l'avvio da un tocco vero: "riprendi" quindi ricomincia
+  // la lettura da capo. Si perde la ripresa precisa al secondo, ma l'audio
+  // esce sempre — è la priorità che avevamo concordato.
   function toggleListen(text, btn){
     if (!('speechSynthesis' in window)) return;
 
     if (speakingState && speakingState.btn === btn) {
       if (speakingState.paused) {
-        if (speakingState.resumeBroken) {
-          // l'ultimo resume non ha funzionato davvero: questo è un tocco vero
-          // dell'utente, quindi ricominciare da qui ha davvero la possibilità
-          // di produrre audio su Android (vedi checkResumeWorked più sopra).
-          ttsDebugLog('tocco RIPRENDI (resumeBroken=true) → ricomincio da capo');
-          speakingState.intentionalStop = true;
-          speechSynthesis.cancel();
-          speakFrom(speakingState.fullText, btn);
-          return;
-        }
-        ttsDebugLog('tocco RIPRENDI → chiamo resume()');
-        speakingState.paused = false;
-        setListenIcon(btn, 'playing');
-        speechSynthesis.resume();
-        checkResumeWorked(speakingState, btn);
+        ttsDebugLog('tocco RIPRENDI → ricomincio la lettura da capo');
+        speakingState.intentionalStop = true;
+        speechSynthesis.cancel();
+        speakFrom(speakingState.fullText, btn);
       } else {
         ttsDebugLog(`tocco PAUSA (started=${speakingState.started})`);
         if (speakingState.started) {
