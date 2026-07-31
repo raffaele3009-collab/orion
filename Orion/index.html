@@ -889,7 +889,7 @@
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'it-IT';
     if (bestItalianVoice) utterance.voice = bestItalianVoice;
-    const thisState = { btn, utterance, paused: false, fullText: text, intentionalStop: false, started: false, pendingPause: false };
+    const thisState = { btn, utterance, paused: false, fullText: text, intentionalStop: false, started: false, pendingPause: false, resumeBroken: false };
 
     // su alcuni telefoni, se si chiama pause() prima che la lettura sia
     // DAVVERO partita, il motore vocale si blocca e poi resume() non
@@ -917,26 +917,25 @@
     speechSynthesis.speak(utterance);
   }
 
-  // Riprende la lettura dopo una pausa, con una rete di sicurezza: su alcuni
-  // Android, resume() a volte non fa ripartire davvero l'audio (bug noto di
-  // Chrome) — l'icona dice "in ascolto" ma resta muto. Controlliamo che sia
-  // ripartito per davvero; se no ritentiamo un paio di volte e, se il motore
-  // resta comunque bloccato, ricominciamo la stessa lettura da capo, così il
-  // tasto non resta mai morto per sempre.
-  function resumeWithWatchdog(state, btn, attempt){
-    attempt = attempt || 0;
-    speechSynthesis.resume();
+  // Controlla, DOPO un resume(), che l'audio sia ripartito per davvero — su
+  // alcuni Android, resume() a volte non fa ripartire nulla (bug noto di
+  // Chrome) mentre l'icona dice "in ascolto" e resta muto. Se non è ripartito,
+  // NON riproviamo da soli con un altro resume/speak: molti telefoni Android
+  // fanno ripartire l'audio solo se il comando arriva da un tocco vero
+  // dell'utente, non da codice lanciato in automatico da un timer — un
+  // secondo tentativo automatico fallirebbe silenziosamente allo stesso modo.
+  // Rimettiamo semplicemente il tasto su "pausa" e segnamo che il prossimo
+  // tocco dell'utente deve ricominciare da capo invece di provare un altro
+  // resume, così quel tocco (vero) ha davvero la possibilità di funzionare.
+  function checkResumeWorked(state, btn){
     setTimeout(() => {
       if (speakingState !== state || state.paused) return; // nel frattempo l'utente ha ripremuto pausa o cambiato card
       if (speechSynthesis.speaking && !speechSynthesis.paused) return; // ripartito per davvero, tutto ok
-      if (attempt < 2) {
-        resumeWithWatchdog(state, btn, attempt + 1);
-      } else {
-        state.intentionalStop = true;
-        speechSynthesis.cancel();
-        speakFrom(state.fullText, btn);
-      }
-    }, 350);
+
+      state.paused = true;
+      state.resumeBroken = true;
+      setListenIcon(btn, 'paused');
+    }, 400);
   }
 
   // Tocco principale (▶/⏸): pausa/riprendi VERO, preciso al secondo esatto —
@@ -947,9 +946,19 @@
 
     if (speakingState && speakingState.btn === btn) {
       if (speakingState.paused) {
+        if (speakingState.resumeBroken) {
+          // l'ultimo resume non ha funzionato davvero: questo è un tocco vero
+          // dell'utente, quindi ricominciare da qui ha davvero la possibilità
+          // di produrre audio su Android (vedi checkResumeWorked più sopra).
+          speakingState.intentionalStop = true;
+          speechSynthesis.cancel();
+          speakFrom(speakingState.fullText, btn);
+          return;
+        }
         speakingState.paused = false;
         setListenIcon(btn, 'playing');
-        resumeWithWatchdog(speakingState, btn);
+        speechSynthesis.resume();
+        checkResumeWorked(speakingState, btn);
       } else {
         if (speakingState.started) {
           speechSynthesis.pause();
