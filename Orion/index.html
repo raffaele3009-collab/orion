@@ -874,6 +874,25 @@
   // Stato: null = ferma, {btn, utterance, paused} = card attualmente in ascolto
   let speakingState = null;
 
+  // --- DIAGNOSTICA TEMPORANEA per il bug pausa/riprendi su Android ---
+  // Pannellino visibile a schermo che mostra passo-passo cosa fa la sintesi
+  // vocale: serve solo per capire dove si blocca su un telefono che non
+  // possiamo controllare direttamente. Da RIMUOVERE una volta risolto il bug.
+  function ttsDebugLog(msg){
+    let box = document.getElementById('ttsDebugBox');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'ttsDebugBox';
+      box.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:32vh;overflow-y:auto;background:rgba(0,0,0,0.9);color:#7CFC9A;font:11px/1.4 monospace;padding:6px 8px;z-index:99999;white-space:pre-wrap;border-top:2px solid #7CFC9A;';
+      document.body.appendChild(box);
+    }
+    const time = new Date().toLocaleTimeString('it-IT', { hour12: false });
+    const line = document.createElement('div');
+    line.textContent = `[${time}] ${msg}`;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+
   function setListenIcon(btn, state){
     // state: 'idle' | 'playing' | 'paused'
     const icons = {
@@ -897,23 +916,30 @@
     // coda" e la applichiamo davvero solo qui, appena l'utterance parte per davvero.
     utterance.onstart = () => {
       thisState.started = true;
+      ttsDebugLog('onstart (la lettura è davvero partita)');
       if (thisState.pendingPause) {
         thisState.pendingPause = false;
+        ttsDebugLog('pausa che era in coda: chiamo pause() ora');
         speechSynthesis.pause();
       }
     };
 
-    utterance.onend = utterance.onerror = () => {
+    const onEndOrError = (evt) => {
       // controlla che sia ANCORA questa la lettura attiva, e che non sia stata
       // fermata di proposito da noi (altrimenti "pausa" farebbe scattare per
       // sbaglio il ripristino dell'icona su "idle")
+      ttsDebugLog(`${evt.type}${evt.error ? ' — motivo: ' + evt.error : ''} (intentionalStop=${thisState.intentionalStop})`);
       if (speakingState === thisState && !thisState.intentionalStop) {
         setListenIcon(btn, 'idle');
         speakingState = null;
       }
     };
+    utterance.onend = onEndOrError;
+    utterance.onerror = onEndOrError;
+
     speakingState = thisState;
     setListenIcon(btn, 'playing');
+    ttsDebugLog(`speak() chiamato (${text.length} caratteri)`);
     speechSynthesis.speak(utterance);
   }
 
@@ -929,9 +955,16 @@
   // resume, così quel tocco (vero) ha davvero la possibilità di funzionare.
   function checkResumeWorked(state, btn){
     setTimeout(() => {
-      if (speakingState !== state || state.paused) return; // nel frattempo l'utente ha ripremuto pausa o cambiato card
-      if (speechSynthesis.speaking && !speechSynthesis.paused) return; // ripartito per davvero, tutto ok
+      if (speakingState !== state || state.paused) {
+        ttsDebugLog('verifica resume: saltata (card cambiata o già in pausa di nuovo)');
+        return;
+      }
+      if (speechSynthesis.speaking && !speechSynthesis.paused) {
+        ttsDebugLog('verifica resume: OK, sta parlando davvero');
+        return;
+      }
 
+      ttsDebugLog(`verifica resume: BLOCCATO (speaking=${speechSynthesis.speaking}, paused=${speechSynthesis.paused}) — al prossimo tocco ricomincio da capo`);
       state.paused = true;
       state.resumeBroken = true;
       setListenIcon(btn, 'paused');
@@ -950,16 +983,19 @@
           // l'ultimo resume non ha funzionato davvero: questo è un tocco vero
           // dell'utente, quindi ricominciare da qui ha davvero la possibilità
           // di produrre audio su Android (vedi checkResumeWorked più sopra).
+          ttsDebugLog('tocco RIPRENDI (resumeBroken=true) → ricomincio da capo');
           speakingState.intentionalStop = true;
           speechSynthesis.cancel();
           speakFrom(speakingState.fullText, btn);
           return;
         }
+        ttsDebugLog('tocco RIPRENDI → chiamo resume()');
         speakingState.paused = false;
         setListenIcon(btn, 'playing');
         speechSynthesis.resume();
         checkResumeWorked(speakingState, btn);
       } else {
+        ttsDebugLog(`tocco PAUSA (started=${speakingState.started})`);
         if (speakingState.started) {
           speechSynthesis.pause();
         } else {
