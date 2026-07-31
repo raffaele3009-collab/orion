@@ -889,7 +889,19 @@
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'it-IT';
     if (bestItalianVoice) utterance.voice = bestItalianVoice;
-    const thisState = { btn, utterance, paused: false, fullText: text, intentionalStop: false };
+    const thisState = { btn, utterance, paused: false, fullText: text, intentionalStop: false, started: false, pendingPause: false };
+
+    // su alcuni telefoni, se si chiama pause() prima che la lettura sia
+    // DAVVERO partita, il motore vocale si blocca e poi resume() non
+    // funziona più. Se l'utente tocca pausa troppo presto, la mettiamo "in
+    // coda" e la applichiamo davvero solo qui, appena l'utterance parte per davvero.
+    utterance.onstart = () => {
+      thisState.started = true;
+      if (thisState.pendingPause) {
+        thisState.pendingPause = false;
+        speechSynthesis.pause();
+      }
+    };
 
     utterance.onend = utterance.onerror = () => {
       // controlla che sia ANCORA questa la lettura attiva, e che non sia stata
@@ -905,6 +917,28 @@
     speechSynthesis.speak(utterance);
   }
 
+  // Riprende la lettura dopo una pausa, con una rete di sicurezza: su alcuni
+  // Android, resume() a volte non fa ripartire davvero l'audio (bug noto di
+  // Chrome) — l'icona dice "in ascolto" ma resta muto. Controlliamo che sia
+  // ripartito per davvero; se no ritentiamo un paio di volte e, se il motore
+  // resta comunque bloccato, ricominciamo la stessa lettura da capo, così il
+  // tasto non resta mai morto per sempre.
+  function resumeWithWatchdog(state, btn, attempt){
+    attempt = attempt || 0;
+    speechSynthesis.resume();
+    setTimeout(() => {
+      if (speakingState !== state || state.paused) return; // nel frattempo l'utente ha ripremuto pausa o cambiato card
+      if (speechSynthesis.speaking && !speechSynthesis.paused) return; // ripartito per davvero, tutto ok
+      if (attempt < 2) {
+        resumeWithWatchdog(state, btn, attempt + 1);
+      } else {
+        state.intentionalStop = true;
+        speechSynthesis.cancel();
+        speakFrom(state.fullText, btn);
+      }
+    }, 350);
+  }
+
   // Tocco principale (▶/⏸): pausa/riprendi VERO, preciso al secondo esatto —
   // funziona in modo affidabile perché usiamo una voce locale del telefono
   // (le voci "di rete" più naturali spesso non supportano bene questa funzione).
@@ -913,11 +947,15 @@
 
     if (speakingState && speakingState.btn === btn) {
       if (speakingState.paused) {
-        speechSynthesis.resume();
         speakingState.paused = false;
         setListenIcon(btn, 'playing');
+        resumeWithWatchdog(speakingState, btn);
       } else {
-        speechSynthesis.pause();
+        if (speakingState.started) {
+          speechSynthesis.pause();
+        } else {
+          speakingState.pendingPause = true;
+        }
         speakingState.paused = true;
         setListenIcon(btn, 'paused');
       }
