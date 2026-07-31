@@ -3,12 +3,12 @@
 // all'istante e anche offline. Le notizie invece passano sempre dalla rete: non le
 // mettiamo in cache qui, altrimenti rischi di vedere titoli vecchi.
 
-const CACHE_NAME = 'orion-shell-v2';
+const CACHE_NAME = 'orion-shell-v3'; // v3: le icone si sono spostate in icons/, versione nuova per non tenere in cache i vecchi percorsi
 const SHELL_FILES = [
   './index.html',
   './manifest.json',
-  './icon-192.png',
-  './icon-512.png',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
 ];
 
 self.addEventListener('install', (event) => {
@@ -65,7 +65,7 @@ self.addEventListener('push', (event) => {
 
   // percorso assoluto: alcuni sistemi non risolvono bene un percorso relativo
   // quando devono mostrare l'icona nella notifica (che non è "nella pagina")
-  const iconUrl = new URL('icon-192.png', self.registration.scope).href;
+  const iconUrl = new URL('icons/icon-192.png', self.registration.scope).href;
 
   event.waitUntil(
     self.registration.showNotification(data.title, {
